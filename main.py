@@ -50,5 +50,6 @@ def test_epoch() -> int:
 
     return correct
 
+
 train_epoch()
 test_epoch()
