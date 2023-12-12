@@ -14,8 +14,7 @@ class Residual(nn.Module):
             self.conv2d0 = nn.Conv2d(input_dep, layer3[0], 1, stride=stride, padding=0, device=device)
             self.norm2d0 = nn.BatchNorm2d(layer3[0], device=device)
 
-        self.conv2d1 = nn.Conv2d(input_dep, layer1[0], layer1[1], stride=stride if down_sample else 1,
-                                 padding=(layer1[1] - 1) // 2, device=device)
+        self.conv2d1 = nn.Conv2d(input_dep, layer1[0], layer1[1], stride=stride if down_sample else 1, padding=(layer1[1] - 1) // 2, device=device)
         self.norm2d1 = nn.BatchNorm2d(layer1[0], device=device)
         self.Relu001 = nn.ReLU()
 
@@ -123,7 +122,7 @@ class Modeller:
             loss.backward()
             self.optimizer.step()
 
-            print("train:step {i}".format(i=i))
+            print("train:\tstep {i}".format(i=i))
             i += 1
 
         if self.device == 'cuda':
@@ -131,7 +130,7 @@ class Modeller:
 
         print("train:epoch done")
 
-    def test(self, data) -> int:
+    def test(self, data):
         self.model.eval()
 
         correct = 0
@@ -145,10 +144,15 @@ class Modeller:
                 batch_output = self.model(batch_input)
                 _, answer = torch.max(batch_output.data, 1)
 
-                correct += (answer == batch_expect).sum().item()
-                total += 1
+                batch_correct = (answer == batch_expect).sum().item()
+                batch_total = len(batch_input)
+
+                correct += batch_correct
+                total += batch_total
+
+                print("test:\tbatch_correct {batch_correct}, batch_total {batch_total}".format(batch_correct=batch_correct, batch_total=batch_total))
 
         if self.device == 'cuda':
             torch.cuda.empty_cache()
 
-        print("test:\tcorrect_rate {correct_rate}".format(correct_rate=correct/total))
+        print("test:correct_rate {correct_rate}".format(correct_rate=correct/total))

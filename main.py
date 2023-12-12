@@ -12,8 +12,8 @@ def get_mnist():
     train_dataset = dsets.MNIST(root='./data', train=True, transform=transforms.ToTensor(), download=True)
     test_dataset = dsets.MNIST(root='./data', train=False, transform=transforms.ToTensor())
 
-    train_loader = DataLoader(dataset=train_dataset, batch_size=32, shuffle=True)
-    test_loader = DataLoader(dataset=test_dataset, batch_size=32, shuffle=False)
+    train_loader = DataLoader(dataset=train_dataset, batch_size=48, shuffle=True)
+    test_loader = DataLoader(dataset=test_dataset, batch_size=48, shuffle=False)
 
     return train_loader, None, test_loader
 
