@@ -11,3 +11,5 @@ python pip install -r requirements.txt
 ```bash
 python main.py
 ```
+
+该分支仅用作练习手写resnet50
