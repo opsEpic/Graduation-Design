@@ -9,5 +9,5 @@ python pip install -r requirements.txt
 ```
 ## 2.运行
 ```bash
-python main.py
+python trainer.py
 ```

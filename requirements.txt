@@ -1,3 +1,6 @@
+PySoundFile==0.9.0.post1
+soundfile==0.12.1
 torch==2.1.1+cu121
-torchvision==0.16.1
+torchaudio==2.1.1
 torchviz==0.0.2
+tqdm==4.66.1
