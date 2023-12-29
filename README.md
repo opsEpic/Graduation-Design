@@ -13,5 +13,5 @@ python pip install -r requirements.txt
 ```
 ## 2.运行
 ```bash
-python trainer.py
+python webui.py
 ```
