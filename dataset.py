@@ -21,7 +21,7 @@ def creat_file_list(data_path, file_list_path):
                 for file2 in os.listdir(path2):
                     path3 = os.path.join(path2, file2)
 
-                    file.write("{path}|{label}\n".format(path=path3, label=label))
+                    file.write(f"{path3}|{label}\n")
 
             label += 1
 
@@ -49,8 +49,8 @@ def separate_file_list(file_list_path, separate_file_list_path, separate_num):
         for line in file:
             file_list.append(line)
 
-    with open(separate_file_list_path, 'w') as file:
-        for line in file_list[:separate_num]:
+    with open(file_list_path, 'w') as file:
+        for line in file_list[separate_num:]:
             file.write(line)
 
     with open(separate_file_list_path, 'w') as file:
@@ -81,7 +81,7 @@ class Dataset:
         self.if_tqdm = if_tqdm
         self.tqdm = None
 
-    def get_batch(self) -> (list, bool):  # batch, end
+    def get_batch(self) -> (list, bool):
         def make_batch(data_batch):
             batch_input = []
             batch_expect = []

@@ -1,231 +1,154 @@
 import os
-import math
 
 import torch
-import torchaudio
 import torch.nn as nn
-import torch.nn.functional as F
-
+from torchaudio.transforms import MFCC
 from torchviz import make_dot
 
 
-class SEModule(nn.Module):
-    def __init__(self, channels, bottleneck=128):
-        super(SEModule, self).__init__()
-        self.se = nn.Sequential(
-            nn.AdaptiveAvgPool1d(1),
-            nn.Conv1d(channels, bottleneck, kernel_size=1, padding=0),
+class TDNN(nn.Module):
+    def __init__(self, in_channels, out_channels, K, D):
+        super(TDNN, self).__init__()
+
+        self.layer0 = nn.Sequential(
+            nn.Conv1d(in_channels, out_channels, kernel_size=K, dilation=D, padding=((K - 1) * D) // 2),
             nn.ReLU(),
-            # nn.BatchNorm1d(bottleneck), # I remove this layer
-            nn.Conv1d(bottleneck, channels, kernel_size=1, padding=0),
+            nn.BatchNorm1d(out_channels),
+        )
+
+    def forward(self, x):
+        return self.layer0(x)
+
+
+class Res2_block(nn.Module):
+    def __init__(self, in_channels, out_channels, K, D, scale=8):
+        super(Res2_block, self).__init__()
+        self.scale = scale
+
+        self.layer0 = nn.ModuleList([
+            TDNN(in_channels // self.scale, out_channels // self.scale, K, D)
+            for _ in range(self.scale - 1)
+        ])
+
+        self.k = K
+        self.d = D
+
+    def forward(self, x):
+        y = []
+        for i, temp_x in enumerate(torch.chunk(x, self.scale, dim=1)):
+            if i == 0:
+                temp_y = temp_x
+            elif i == 1:
+                temp_y = self.layer0[i - 1](temp_x)
+            else:
+                temp_y = self.layer0[i - 1](temp_x + y[i - 1])
+            y.append(temp_y)
+
+        return torch.cat(y, dim=1)
+
+
+class SE_block(nn.Module):
+    def __init__(self, in_channels, out_channels, bottleneck=128):
+        super(SE_block, self).__init__()
+
+        self.layer0 = nn.Sequential(
+            nn.AdaptiveAvgPool1d(1),
+            nn.Conv1d(in_channels, bottleneck, kernel_size=1, dilation=1, padding=0),
+            nn.ReLU(),
+            nn.BatchNorm1d(bottleneck),
+            nn.Conv1d(bottleneck, out_channels, kernel_size=1, dilation=1, padding=0),
             nn.Sigmoid(),
         )
 
-    def forward(self, input):
-        x = self.se(input)
-        return input * x
-
-
-class Bottle2neck(nn.Module):
-    def __init__(self, inplanes, planes, kernel_size=None, dilation=None, scale=8):
-        super(Bottle2neck, self).__init__()
-        width = int(math.floor(planes / scale))
-        self.conv1 = nn.Conv1d(inplanes, width * scale, kernel_size=1)
-        self.bn1 = nn.BatchNorm1d(width * scale)
-        self.nums = scale - 1
-        convs = []
-        bns = []
-        num_pad = math.floor(kernel_size / 2) * dilation
-        for i in range(self.nums):
-            convs.append(nn.Conv1d(width, width, kernel_size=kernel_size, dilation=dilation, padding=num_pad))
-            bns.append(nn.BatchNorm1d(width))
-        self.convs = nn.ModuleList(convs)
-        self.bns = nn.ModuleList(bns)
-        self.conv3 = nn.Conv1d(width * scale, planes, kernel_size=1)
-        self.bn3 = nn.BatchNorm1d(planes)
-        self.relu = nn.ReLU()
-        self.width = width
-        self.se = SEModule(planes)
-
     def forward(self, x):
-        residual = x
-        out = self.conv1(x)
-        out = self.relu(out)
-        out = self.bn1(out)
-
-        spx = torch.split(out, self.width, 1)
-        for i in range(self.nums):
-            if i == 0:
-                sp = spx[i]
-            else:
-                sp = sp + spx[i]
-            sp = self.convs[i](sp)
-            sp = self.relu(sp)
-            sp = self.bns[i](sp)
-            if i == 0:
-                out = sp
-            else:
-                out = torch.cat((out, sp), 1)
-        out = torch.cat((out, spx[self.nums]), 1)
-
-        out = self.conv3(out)
-        out = self.relu(out)
-        out = self.bn3(out)
-
-        out = self.se(out)
-        out += residual
-        return out
+        return x * self.layer0(x)
 
 
-class PreEmphasis(torch.nn.Module):
+class SERes2_block(nn.Module):
+    def __init__(self, C, K, D):
+        super(SERes2_block, self).__init__()
 
-    def __init__(self, coef: float = 0.97):
-        super().__init__()
-        self.coef = coef
-        self.register_buffer('flipped_filter', torch.FloatTensor([-self.coef, 1.]).unsqueeze(0).unsqueeze(0))
+        self.layer0 = nn.Sequential(
+            TDNN(C, C, 1, 1),
 
-    def forward(self, input: torch.tensor) -> torch.tensor:
-        input = input.unsqueeze(1)
-        input = F.pad(input, (1, 0), 'reflect')
-        return F.conv1d(input, self.flipped_filter).squeeze(1)
+            Res2_block(C, C, K, D),
+            nn.ReLU(),
+            nn.BatchNorm1d(C),
 
+            TDNN(C, C, 1, 1),
 
-class FbankAug(nn.Module):
-
-    def __init__(self, freq_mask_width=(0, 8), time_mask_width=(0, 10)):
-        self.time_mask_width = time_mask_width
-        self.freq_mask_width = freq_mask_width
-        super().__init__()
-
-    def mask_along_axis(self, x, dim):
-        original_size = x.shape
-        batch, fea, time = x.shape
-        if dim == 1:
-            D = fea
-            width_range = self.freq_mask_width
-        else:
-            D = time
-            width_range = self.time_mask_width
-
-        mask_len = torch.randint(width_range[0], width_range[1], (batch, 1), device=x.device).unsqueeze(2)
-        mask_pos = torch.randint(0, max(1, D - mask_len.max()), (batch, 1), device=x.device).unsqueeze(2)
-        arange = torch.arange(D, device=x.device).view(1, 1, -1)
-        mask = (mask_pos <= arange) * (arange < (mask_pos + mask_len))
-        mask = mask.any(dim=1)
-
-        if dim == 1:
-            mask = mask.unsqueeze(2)
-        else:
-            mask = mask.unsqueeze(1)
-
-        x = x.masked_fill_(mask, 0.0)
-        return x.view(*original_size)
-
-    def forward(self, x):
-        x = self.mask_along_axis(x, dim=2)
-        x = self.mask_along_axis(x, dim=1)
-        return x
-
-
-class ECAPA_TDNN(nn.Module):
-
-    def __init__(self, C):
-        super(ECAPA_TDNN, self).__init__()
-
-        self.torchfbank = torch.nn.Sequential(
-            PreEmphasis(),
-            torchaudio.transforms.MelSpectrogram(sample_rate=16000, n_fft=512, win_length=400, hop_length=160, f_min=20, f_max=7600, window_fn=torch.hamming_window, n_mels=80),
+            SE_block(C, C),
         )
 
-        self.specaug = FbankAug()  # Spec augmentation
+    def forward(self, x):
+        return x + self.layer0(x)
 
-        self.conv1 = nn.Conv1d(80, C, kernel_size=5, stride=1, padding=2)
-        self.relu = nn.ReLU()
-        self.bn1 = nn.BatchNorm1d(C)
-        self.layer1 = Bottle2neck(C, C, kernel_size=3, dilation=2, scale=8)
-        self.layer2 = Bottle2neck(C, C, kernel_size=3, dilation=3, scale=8)
-        self.layer3 = Bottle2neck(C, C, kernel_size=3, dilation=4, scale=8)
-        # I fixed the shape of the output from MFA layer, that is close to the setting from ECAPA paper.
-        self.layer4 = nn.Conv1d(3 * C, 1536, kernel_size=1)
-        self.attention = nn.Sequential(
-            nn.Conv1d(4608, 256, kernel_size=1),
-            nn.ReLU(),
-            nn.BatchNorm1d(256),
-            nn.Tanh(),  # I add this layer
-            nn.Conv1d(256, 1536, kernel_size=1),
+
+class AttentiveStatPooling_block(nn.Module):
+    def __init__(self, in_channels, attention_channels=128):
+        super(AttentiveStatPooling_block, self).__init__()
+
+        self.layer0 = nn.Sequential(
+            TDNN(3 * in_channels, attention_channels, 1, 1),
+            nn.Tanh(),
+            TDNN(attention_channels, in_channels, 1, 1),
             nn.Softmax(dim=2),
         )
-        self.bn5 = nn.BatchNorm1d(3072)
-        self.fc6 = nn.Linear(3072, 192)
-        self.bn6 = nn.BatchNorm1d(192)
 
     def forward(self, x):
-        with torch.no_grad():
-            x = self.torchfbank(x) + 1e-6
-            x = x.log()
-            x = x - torch.mean(x, dim=-1, keepdim=True)
-            x = self.specaug(x)
-
-        x = self.conv1(x)
-        x = self.relu(x)
-        x = self.bn1(x)
-
-        x1 = self.layer1(x)
-        x2 = self.layer2(x + x1)
-        x3 = self.layer3(x + x1 + x2)
-
-        x = self.layer4(torch.cat((x1, x2, x3), dim=1))
-        x = self.relu(x)
-
         t = x.size()[-1]
+        global_x = torch.cat((
+            x,
+            torch.mean(x, dim=2, keepdim=True).repeat(1, 1, t),
+            torch.sqrt(torch.var(x, dim=2, keepdim=True).clamp(min=1e-4)).repeat(1, 1, t),
+        ), dim=1)
 
-        global_x = torch.cat((x, torch.mean(x, dim=2, keepdim=True).repeat(1, 1, t), torch.sqrt(torch.var(x, dim=2, keepdim=True).clamp(min=1e-4)).repeat(1, 1, t)), dim=1)
-
-        w = self.attention(global_x)
+        w = self.layer0(global_x)
 
         mu = torch.sum(x * w, dim=2)
         sg = torch.sqrt((torch.sum((x ** 2) * w, dim=2) - mu ** 2).clamp(min=1e-4))
-
-        x = torch.cat((mu, sg), 1)
-        x = self.bn5(x)
-        x = self.fc6(x)
-        x = self.bn6(x)
+        x = torch.cat((
+            mu,
+            sg,
+        ), dim=1)
 
         return x
 
 
-class AAMsoftmax(nn.Module):
-    def __init__(self, n_class, m, s):
-        super(AAMsoftmax, self).__init__()
-        self.m = m
-        self.s = s
-        self.weight = torch.nn.Parameter(torch.FloatTensor(n_class, 192), requires_grad=True)
-        self.ce = nn.CrossEntropyLoss()
-        nn.init.xavier_normal_(self.weight, gain=1)
-        self.cos_m = math.cos(self.m)
-        self.sin_m = math.sin(self.m)
-        self.th = math.cos(math.pi - self.m)
-        self.mm = math.sin(math.pi - self.m) * self.m
+class ECAPATDNN(nn.Module):
+    def __init__(self, C, S):
+        super(ECAPATDNN, self).__init__()
 
-    def forward(self, x, label=None):
-        cosine = F.linear(F.normalize(x), F.normalize(self.weight))
-        sine = torch.sqrt((1.0 - torch.mul(cosine, cosine)).clamp(0, 1))
-        phi = cosine * self.cos_m - sine * self.sin_m
-        phi = torch.where((cosine - self.th) > 0, phi, cosine - self.mm)
-        one_hot = torch.zeros_like(cosine)
-        one_hot.scatter_(1, label.view(-1, 1), 1)
-        output = (one_hot * phi) + ((1.0 - one_hot) * cosine)
-        output = output * self.s
+        self.layer0 = TDNN(80, C, 5, 1)
 
-        loss = self.ce(output, label)
-        _, answer = torch.max(output.data, 1)
-        correct = (answer == label).sum().item()
+        self.layer1 = SERes2_block(C, 3, 2)
+        self.layer2 = SERes2_block(C, 3, 3)
+        self.layer3 = SERes2_block(C, 3, 4)
 
-        return loss, correct
+        self.layer4 = nn.Sequential(
+            nn.Conv1d(3 * C, 3 * C, kernel_size=1),
+            nn.ReLU(),
+
+            AttentiveStatPooling_block(3 * C),
+            nn.BatchNorm1d(3072),
+
+            nn.Linear(3072, S),
+            nn.BatchNorm1d(S),
+        )
+
+    def forward(self, x):
+        x = self.layer0(x)
+
+        x1 = self.layer1(x)
+        x2 = self.layer2(x1)
+        x3 = self.layer3(x2)
+
+        x = self.layer4(torch.cat((x1, x2, x3), dim=1))
+        return x
 
 
-class Modeller:
-    def __load__(self, C, path, device):
+class ECAPATDNN_model:
+    def __load__(self, path):
         models = []
 
         path0 = path
@@ -235,59 +158,72 @@ class Modeller:
 
         if len(models) > 0:
             self.step = int(models[-1][:-3])
-            return torch.load(os.path.join(path0, models[-1])).to(device)
+            self.model = torch.load(os.path.join(path0, models[-1]))
 
-        return ECAPA_TDNN(C).to(device)
-
-    def __init__(self, C, O, model_path, device):
+    def __init__(self, model_path, device, C=512, S=192):
         self.model_path = model_path
         self.step = 0
 
-        self.model = self.__load__(C, model_path, device)
-        self.criterion = AAMsoftmax(O, 0.2, 30).to(device)
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001, weight_decay=2e-5)
+        self.mfcc = MFCC(16000, 80, melkwargs={
+            'n_mels': 80,
+            'n_fft': 512,
+            'win_length': 400,
+            'hop_length': 160,
+            'f_min': 20,
+            'f_max': 7600,
+            'window_fn': torch.hamming_window,
+        }).to(device)
 
-    def draw(self) -> None:
-        x = torch.zeros([16, 16000], device=self.model.device())
+        self.model = None
+        self.__load__(model_path)
+        if self.model is None:
+            self.model = ECAPATDNN(C, S)
+        self.model = self.model.to(device)
 
-        y = self.model(x)
-        output = make_dot(y.mean(), params=dict(self.model.named_parameters()))
-        output.view()
+        self.criterion = nn.CrossEntropyLoss()
+        self.optimizer = torch.optim.Adam(self.model.parameters())
 
     def save(self) -> None:
         torch.save(self.model, self.model_path + "/%04d.pt" % self.step)
 
-    def train(self, data) -> None:
+    def train(self, data) -> (float, int):
         self.model.train()
 
         batch_input, batch_expect = data[0], data[1]
+        batch_input = self.mfcc(batch_input)
 
         batch_output = self.model(batch_input)
-        loss, _ = self.criterion(batch_output, batch_expect)
+        loss = self.criterion(batch_output, batch_expect)
 
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
         self.step += 1
+        return 0., 0
 
-    def eval(self, data) -> float:
-        self.model.eval()
+    def eval(self, data) -> (float, int):
+        return self.test(data)
 
-        batch_input, batch_expect = data[0], data[1]
-
-        batch_output = self.model(batch_input)
-        loss, _ = self.criterion(batch_output, batch_expect)
-
-        return loss.item()
-
-    def test(self, data) -> int:
+    def test(self, data) -> (float, int):
         self.model.eval()
 
         with torch.no_grad():
             batch_input, batch_expect = data[0], data[1]
+            batch_input = self.mfcc(batch_input)
 
             batch_output = self.model(batch_input)
-            _, batch_correct = self.criterion(batch_output, batch_expect)
+            loss = self.criterion(batch_output, batch_expect)
+            _, batch_label = torch.max(batch_output.data, 1)
+            correct = (batch_label == batch_expect).sum().item()
 
-            return batch_correct
+            return loss.item(), correct
+
+    def draw(self, data) -> None:
+        self.model.train()
+
+        batch_input, batch_expect = data[0], data[1]
+        batch_input = self.mfcc(batch_input)
+
+        y = self.model(batch_input)
+        make_dot(y.mean(), params=dict(self.model.named_parameters())).view()

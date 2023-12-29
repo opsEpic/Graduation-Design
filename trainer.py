@@ -1,77 +1,120 @@
 import time
+import logging
 
-from config import *
-import models.ecapa_tdnn.model as ecapa_tdnn
-from dataset import *
+import torch
 
-config_train = Config('./config/train.json', {
-    'dataset_path': './dataset/vox1/dev/wav',
+from config import Config
+from models.ecapa_tdnn.model import ECAPATDNN_model
+from dataset import creat_file_list, disrupt_file_list, separate_file_list, Dataset
 
-    'eval_list_size': '40',
-    'test_list_size': '40',
-
+config_preset = {
+    'dataset_path': './dataset/vox1/test/wav',
+    'eval_list_size': 32,
+    'test_list_size': 32,
     'train_list_path': './filelist/train.list',
     'eval_list_path': './filelist/eval.list',
     'test_list_path': './filelist/test.list',
 
+    'C': 512,
+    'speaker': 40,
     'batch_size': 64,
     'slice_length': 2 * 16000,
-    'lr': 0.001,
-
-    'max_memory(GB)': 16.0,
+    'model_train_epoch': 1,
     'device': 'cpu',
 
-    'model_save_epoch': 5,
+    'model_save': False,
     'model_save_path': './exp',
-})
+}
 
 
-def model_pretrain():
-    creat_file_list(config_train.config['dataset_path'], config_train.config['train_list_path'])
-    disrupt_file_list(config_train.config['train_list_path'])
-    separate_file_list(config_train.config['train_list_path'], config_train.config['eval_list_path'], int(config_train.config['eval_list_size']))
-    separate_file_list(config_train.config['train_list_path'], config_train.config['test_list_path'], int(config_train.config['test_list_size']))
+class Trainer:
+    def __init__(self):
+        self.config = Config('./config/train.json', config_preset)
 
+        self.train_dataset = None
+        self.eval_dataset = None
+        self.test_dataset = None
 
-def model_train():
-    model = ecapa_tdnn.Modeller(512, 40, config_train.config['model_save_path'], config_train.config['device'])
+        self.model = None
 
-    train_dataset = Dataset(config_train.config['train_list_path'], int(config_train.config['batch_size']), config_train.config['slice_length'], True, config_train.config['device'])
-    eval_dataset = Dataset(config_train.config['eval_list_path'], int(config_train.config['batch_size']), config_train.config['slice_length'], False, config_train.config['device'])
+    def model_pretrain(self):
+        creat_file_list(self.config.config['dataset_path'], self.config.config['train_list_path'])
+        disrupt_file_list(self.config.config['train_list_path'])
+        separate_file_list(self.config.config['train_list_path'], self.config.config['eval_list_path'], int(self.config.config['eval_list_size']))
+        separate_file_list(self.config.config['train_list_path'], self.config.config['test_list_path'], int(self.config.config['test_list_size']))
 
-    step = int(config_train.config['model_save_epoch'])
-    while True:
+    def load_dataset(self):
+        self.train_dataset = Dataset(self.config.config['train_list_path'], int(self.config.config['batch_size']), self.config.config['slice_length'], True, self.config.config['device'])
+        self.eval_dataset = Dataset(self.config.config['eval_list_path'], int(self.config.config['batch_size']), self.config.config['slice_length'], False, self.config.config['device'])
+        self.test_dataset = Dataset(self.config.config['test_list_path'], int(self.config.config['batch_size']), self.config.config['slice_length'], False, self.config.config['device'])
+
+    def load_model(self):
+        self.model = ECAPATDNN_model(self.config.config['model_save_path'], self.config.config['device'], int(self.config.config['C']), int(self.config.config['speaker']))
+
+    def __model_run__(self, mode):  # mode: train eval test
+        dataset = {
+            'train': self.train_dataset,
+            'eval': self.eval_dataset,
+            'test': self.test_dataset,
+        }
+        operator = {
+            'train': self.model.train,
+            'eval': self.model.eval,
+            'test': self.model.test,
+        }
+
+        loss = 0.
+        correct = 0
+        total = 0
+        end = False
+        while not end:
+            batch, end = dataset[mode].get_batch()
+            batch_loss, batch_correct = operator[mode](batch)
+            loss += batch_loss
+            correct += batch_correct
+            total += len(batch[0])
+
+        time.sleep(0.5)
+        return loss, correct, total
+
+    def model_train(self):
+        step = int(self.config.config['model_train_epoch'])
+
         for _ in range(step):
-            train_end = False
-            while not train_end:
-                train_batch, train_end = train_dataset.get_batch()
-                model.train(train_batch)
-
-            loss = 0.
-            eval_end = False
-            while not eval_end:
-                eval_batch, eval_end = eval_dataset.get_batch()
-                loss += model.eval(eval_batch)
-
-            info_log('loss = {loss}'.format(loss=loss))
+            self.__model_run__('train')
             time.sleep(0.5)
 
-        model.save()
+            loss, correct, total = self.__model_run__('eval')
+            logging.info(f'loss = {loss}')
+            logging.info(f'correct = {correct}/{total}')
+            time.sleep(0.5)
+
+        if self.config.config['model_save']:
+            self.model.save()
+
+    def model_test(self):
+        loss, correct, total = self.__model_run__('test')
+        logging.info(f'loss = {loss}')
+        logging.info(f'correct = {correct}/{total}')
         time.sleep(0.5)
 
+    def model_draw(self):
+        batch_size = int(self.config.config['batch_size'])
+        slice_length = int(self.config.config['slice_length'])
+        draw_batch = torch.zeros([batch_size, slice_length], device=self.config.config['device'])
 
-def model_test():
-    model = ecapa_tdnn.Modeller(512, 40, config_train.config['device'], config_train.config['model_save_path'])
-
-    test_dataset = Dataset(config_train.config['test_list_path'], config_train.config['batch_size'], config_train.config['slice_length'], False, config_train.config['device'])
-
-    test_end = False
-    while not test_end:
-        test_batch, test_end = test_dataset.get_batch()
-        model.eval(test_batch)
+        self.model.draw([draw_batch, None])
 
 
-if __name__ == '__main__':
-    # model_pretrain()
-    # model_train()
-    pass
+if __name__ == '__main__':  # example
+    logging.basicConfig(level=logging.INFO)
+
+    pretrain = Trainer()
+    pretrain.model_pretrain()
+
+    model = Trainer()
+    model.load_dataset()
+    model.load_model()
+
+    model.model_train()
+    model.model_test()

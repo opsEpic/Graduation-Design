@@ -1,23 +1,25 @@
 import json
 import os
-
-from mylog import *
+import logging
 
 
 class Config:
+    def save(self):
+        with open(self.config_path, 'w') as config_file:
+            json.dump(self.config, config_file, indent=4)
+
     def __load__(self):
         if not os.path.exists(self.config_path):
-            with open(self.config_path, 'w') as config_file:
-                json.dump(self.config, config_file)
+            self.save()
 
-            warn_log('config has been firstly created.')
+            logging.warning('config has been firstly created.')
             return
 
         with open(self.config_path, 'r') as config_file:
             config = json.load(config_file)
 
             if self.config.keys() != config.keys():
-                warn_log('config has more or less keys than preset.')
+                logging.warning('config has more or less keys than preset.')
 
             self.config = config
 
@@ -26,3 +28,5 @@ class Config:
         self.config = preset
 
         self.__load__()
+
+
