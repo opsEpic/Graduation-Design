@@ -12,6 +12,11 @@ git clone https://github.com/opsEpic/Graduation-Design.git
 python pip install -r requirements.txt
 ```
 ## 2.运行
++ 运行并训练一个epoch
 ```bash
 python trainer.py
+```
++ 运行图形界面
+```bash
+python webui.py
 ```

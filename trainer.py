@@ -4,7 +4,7 @@ import logging
 import torch
 
 from config import Config
-from models.ecapa_tdnn.model import ECAPATDNN_model
+from models.ecapa_tdnn.modeler import ECAPATDNN_model
 from dataset import creat_file_list, disrupt_file_list, separate_file_list, Dataset
 
 config_preset = {
@@ -44,9 +44,9 @@ class Trainer:
         separate_file_list(self.config.config['train_list_path'], self.config.config['test_list_path'], int(self.config.config['test_list_size']))
 
     def load_dataset(self):
-        self.train_dataset = Dataset(self.config.config['train_list_path'], int(self.config.config['batch_size']), self.config.config['slice_length'], True, self.config.config['device'])
-        self.eval_dataset = Dataset(self.config.config['eval_list_path'], int(self.config.config['batch_size']), self.config.config['slice_length'], False, self.config.config['device'])
-        self.test_dataset = Dataset(self.config.config['test_list_path'], int(self.config.config['batch_size']), self.config.config['slice_length'], False, self.config.config['device'])
+        self.train_dataset = Dataset(self.config.config['train_list_path'], int(self.config.config['batch_size']), int(self.config.config['slice_length']), True, self.config.config['device'])
+        self.eval_dataset = Dataset(self.config.config['eval_list_path'], int(self.config.config['batch_size']), int(self.config.config['slice_length']), False, self.config.config['device'])
+        self.test_dataset = Dataset(self.config.config['test_list_path'], int(self.config.config['batch_size']), int(self.config.config['slice_length']), False, self.config.config['device'])
 
     def load_model(self):
         self.model = ECAPATDNN_model(self.config.config['model_save_path'], self.config.config['device'], int(self.config.config['C']), int(self.config.config['speaker']))
@@ -84,19 +84,23 @@ class Trainer:
             self.__model_run__('train')
             time.sleep(0.5)
 
-            loss, correct, total = self.__model_run__('eval')
+            loss, _, _ = self.__model_run__('eval')
             logging.info(f'loss = {loss}')
-            logging.info(f'correct = {correct}/{total}')
             time.sleep(0.5)
 
         if self.config.config['model_save']:
             self.model.save()
 
     def model_test(self):
-        loss, correct, total = self.__model_run__('test')
-        logging.info(f'loss = {loss}')
+        _, correct, total = self.__model_run__('test')
         logging.info(f'correct = {correct}/{total}')
         time.sleep(0.5)
+
+    def model_infer(self, audio):
+        audio = torch.tensor(audio, device=self.config.config['device'])
+        audio = audio / torch.max(audio)
+        audio = audio.view(1, -1)
+        return self.model.infer([audio, None])
 
     def model_draw(self):
         batch_size = int(self.config.config['batch_size'])
