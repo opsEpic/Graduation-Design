@@ -14,7 +14,7 @@ python pip install -r requirements.txt
 ## 2.运行
 + 运行并训练一个epoch
 ```bash
-python trainer.py
+python webui.py
 ```
 + 运行图形界面
 ```bash
