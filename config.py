@@ -28,5 +28,3 @@ class Config:
         self.config = preset
 
         self.__load__()
-
-

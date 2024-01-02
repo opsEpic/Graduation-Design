@@ -11,7 +11,6 @@ from trainer import Trainer
 
 recommend_device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
 model = Trainer()
-infer_stream_buffer = []
 
 
 def get_json_config():
@@ -20,6 +19,7 @@ def get_json_config():
 
 def config_save():
     model.config.save()
+    return '保存完成'
 
 
 def config_update(key, val):
@@ -32,19 +32,14 @@ def model_pretrain():
     return '预处理完成'
 
 
-def model_load_dataset():
-    model.load_dataset()
-    return '训练集加载完成'
-
-
 def model_load_model():
     model.load_model()
-    return '模型加载完成', str(model.model.step)
+    return '模型加载完成'
 
 
 def model_train():
     model.model_train()
-    return '训练完成', str(model.model.step)
+    return '训练完成'
 
 
 def model_test():
@@ -52,30 +47,17 @@ def model_test():
     return '测试完成'
 
 
-def model_infer(wav):
-    sr, audio = wav
-    audio = np.array(audio, dtype=np.float32)
-    audio = librosa.resample(audio, orig_sr=sr, target_sr=16000)
+def model_infer(wav1, wav2):
+    sr, audio1 = wav1
+    audio1 = np.array(audio1, dtype=np.float32)
+    audio1 = librosa.resample(audio1, orig_sr=sr, target_sr=16000)
 
-    label = model.model_infer(audio)
+    sr, audio2 = wav2
+    audio2 = np.array(audio2, dtype=np.float32)
+    audio2 = librosa.resample(audio2, orig_sr=sr, target_sr=16000)
+
+    label = model.model_infer(audio1, audio2)
     return str(label)
-
-
-def model_infer_stream(wav, buffer_size, old_news):
-    global infer_stream_buffer
-
-    sr, audio = wav
-    audio = np.array(audio, dtype=np.float32)
-    audio = librosa.resample(audio, orig_sr=sr, target_sr=16000)
-    infer_stream_buffer.extend(audio)
-
-    buffer_size = int(buffer_size)
-    if len(infer_stream_buffer) > buffer_size:
-        label = model.model_infer(infer_stream_buffer[:buffer_size])
-        infer_stream_buffer = []
-        return str(label)
-
-    return old_news
 
 
 def main():
@@ -89,71 +71,55 @@ def main():
                         gr.Markdown('<h2>config</h2>')
                         config = gr.Code(value=get_json_config(), language='json')
                         save = gr.Button(value='保存（点击才能保存到文件）')
+                        save_output = gr.Text(label='output', value='')
 
-                        save.click(config_save)
-
-                        gr.Markdown('<h2>state</h2>')
-                        with gr.Row():
-                            load_dataset = gr.Button(value='加载训练集')
-                            load_model = gr.Button(value='加载模型')
-                        step = gr.Text(label='模型训练步数', value='0')
-                        test = gr.Button(value='开始测试')
-                        text_output = gr.Text(label='output')
-
-                        load_dataset.click(model_load_dataset, outputs=[text_output])
-                        load_model.click(model_load_model, outputs=[text_output, step])
-                        test.click(model_test, outputs=[text_output])
+                        save.click(config_save, outputs=[save_output])
 
                 with gr.Column():
                     with gr.Tab('预处理'):
                         gr.Markdown('<h2>预处理</h2>')
                         gr.Markdown('`dataset_path`数据集路径，支持 voxceleb 或目录结构与其类似的数据集。<br/>'
-                                    '`eval_list_size`验证集音频数。<br/>'
-                                    '`eval_list_size`测试集音频数。<br/>'
+                                    '`eval_num`验证集音频数。<br/>'
                                     '`train_list_path`训练集file_list输出路径。<br/>'
-                                    '`eval_list_path`验证集file_list输出路径。<br/>'
-                                    '`test_list_path`测试集file_list输出路径。<br/>')
+                                    '`eval_list_path`验证集file_list输出路径。<br/>')
 
-                        dataset_path = gr.Text(label='dataset_path', value=model.config.config['dataset_path'], interactive=True)
+                        train_dataset_path = gr.Text(label='train_dataset_path', value=model.config.config['train_dataset_path'], interactive=True)
                         with gr.Row():
-                            eval_list_size = gr.Slider(label='eval_list_size', value=model.config.config['eval_list_size'], minimum=1, maximum=512, step=1, interactive=True)
-                            test_list_size = gr.Slider(label='test_list_size', value=model.config.config['test_list_size'], minimum=1, maximum=512, step=1, interactive=True)
+                            eval_num = gr.Slider(label='eval_num', value=model.config.config['eval_num'], minimum=1, maximum=512, step=1, interactive=True)
                         train_list_path = gr.Text(label='train_list_path', value=model.config.config['train_list_path'], interactive=True)
                         eval_list_path = gr.Text(label='eval_list_path', value=model.config.config['eval_list_path'], interactive=True)
-                        test_list_path = gr.Text(label='test_list_path', value=model.config.config['test_list_path'], interactive=True)
                         pretrain = gr.Button(value='开始预处理')
                         pretrain_output = gr.Text(label='output', value='')
 
-                        dataset_path.change(config_update, inputs=[gr.Text(value='dataset_path', visible=False), dataset_path], outputs=[config])
-                        eval_list_size.change(config_update, inputs=[gr.Text(value='eval_list_size', visible=False), eval_list_size], outputs=[config])
-                        test_list_size.change(config_update, inputs=[gr.Text(value='test_list_size', visible=False), test_list_size], outputs=[config])
+                        train_dataset_path.change(config_update, inputs=[gr.Text(value='train_dataset_path', visible=False), train_dataset_path], outputs=[config])
+                        eval_num.change(config_update, inputs=[gr.Text(value='eval_num', visible=False), eval_num], outputs=[config])
                         train_list_path.change(config_update, inputs=[gr.Text(value='train_list_path', visible=False), train_list_path], outputs=[config])
                         eval_list_path.change(config_update, inputs=[gr.Text(value='eval_list_path', visible=False), eval_list_path], outputs=[config])
-                        test_list_path.change(config_update, inputs=[gr.Text(value='test_list_path', visible=False), test_list_path], outputs=[config])
                         pretrain.click(model_pretrain, outputs=[pretrain_output])
 
                     with gr.Tab('训练'):
                         gr.Markdown('<h2>训练</h2>')
                         gr.Markdown('`C`模型中间层channels大小，默认512。<br/>'
                                     '`speaker`训练集说话人总数。<br/>'
-                                    '`batch_size`内存足够可以调大。<br/>'
+                                    '`batch_size`显存足够可以调大。<br/>'
                                     '`slice_length`每个切片的采样数（时长 * 采样率）。<br/>'
-                                    '`model_train_epoch`模型训练轮数。<br/>'
                                     '`device`训练设备。<br/>'
+                                    '`model_train_epoch`模型训练轮数。<br/>'
                                     '`model_save`模型保存与否。<br/>'
                                     '`model_save_path`模型保存路径。<br/>')
 
                         with gr.Row():
                             C = gr.Slider(label='C', value=model.config.config['C'], minimum=128, maximum=2048, step=8, interactive=True)
+                        with gr.Row():
                             speaker = gr.Slider(label='speaker', value=model.config.config['speaker'], minimum=2, maximum=16384, step=1, interactive=True)
-                        with gr.Row():
                             batch_size = gr.Slider(label='batch_size', value=model.config.config['batch_size'], minimum=8, maximum=2048, step=8, interactive=True)
-                            slice_length = gr.Slider(label='slice_length', value=model.config.config['slice_length'], minimum=8000, maximum=160000, step=1000, interactive=True)
                         with gr.Row():
-                            model_train_epoch = gr.Slider(label='model_train_epoch', value=model.config.config['model_train_epoch'], minimum=1, maximum=1024, step=1, interactive=True)
-                            device = gr.Dropdown(label=f'device（推荐：{recommend_device}）', choices=['cuda', 'mps', 'cpu'], value=model.config.config['device'], interactive=True)
+                            slice_length = gr.Slider(label='slice_length', value=model.config.config['slice_length'], minimum=4000, maximum=80000, step=4000, interactive=True)
+                            model_train_epoch = gr.Slider(label='model_train_epoch', value=model.config.config['model_train_epoch'], minimum=1, maximum=128, step=1, interactive=True)
+                        device = gr.Dropdown(label=f'device（推荐：{recommend_device}）', choices=['cuda', 'mps', 'cpu'], value=model.config.config['device'], interactive=True)
                         model_save = gr.Checkbox(label='model_save', value=model.config.config['model_save'], interactive=True)
                         model_save_path = gr.Text(label='model_save_path', value=model.config.config['model_save_path'], interactive=True)
+                        load_model = gr.Button(value='加载最新模型')
                         train = gr.Button(value='开始训练')
                         train_output = gr.Text(label='output', value='')
 
@@ -165,24 +131,27 @@ def main():
                         device.change(config_update, inputs=[gr.Text(value='device', visible=False), device], outputs=[config])
                         model_save.change(config_update, inputs=[gr.Text(value='model_save', visible=False), model_save], outputs=[config])
                         model_save_path.change(config_update, inputs=[gr.Text(value='model_save_path', visible=False), model_save_path], outputs=[config])
-                        train.click(model_train, outputs=[train_output, step])
+                        load_model.click(model_load_model, outputs=[train_output])
+                        train.click(model_train, outputs=[train_output])
+                    with gr.Tab('测试'):
+                        gr.Markdown('<h2>测试</h2>')
+
+                        test_num = gr.Slider(label='test_num', value=model.config.config['test_num'], minimum=1, maximum=4096, step=1, interactive=True)
+                        test = gr.Button(value='开始测试')
+                        text_output = gr.Text(label='output')
+
+                        test_num.change(config_update, inputs=[gr.Text(value='test_num', visible=False), test_num], outputs=[config])
+                        test.click(model_test, outputs=[text_output])
 
                     with gr.Tab('推理'):
-                        gr.Markdown('<h2>流式推理</h2>')
+                        gr.Markdown('<h2>推理</h2>')
 
-                        buffer_size = gr.Slider(label='流式推理缓冲大小（采样数）', value=16000, minimum=4000, maximum=80000, step=4000, interactive=True)
-                        audio_stream = gr.Audio(label='流式推理', streaming=True)
-                        infer_output_stream = gr.Text(label='output', value='')
-
-                        audio_stream.stream(model_infer_stream, inputs=[audio_stream, buffer_size, infer_output_stream], outputs=[infer_output_stream])
-
-                        gr.Markdown('<h2>流式推理</h2>')
-
-                        audio = gr.Audio(label='文件或录制推理')
+                        audio1 = gr.Audio(label='文件或录制推理')
+                        audio2 = gr.Audio(label='文件或录制推理')
                         infer = gr.Button(value='开始推理')
                         infer_output = gr.Text(label='output', value='')
 
-                        infer.click(model_infer, inputs=[audio], outputs=[infer_output])
+                        infer.click(model_infer, inputs=[audio1, audio2], outputs=[infer_output])
 
     port = 4567
     webbrowser.open(f"http://127.0.0.1:{port}")

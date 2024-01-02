@@ -1,4 +1,6 @@
 gradio
+librosa
+numpy
 PySoundFile
 soundfile
 torch
