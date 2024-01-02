@@ -26,7 +26,7 @@ config_preset = {
 
     'test_dataset_path': './dataset/vox1/wav',
     'test_num': 1000,
-    'test_list_path': './filelist/test.list',
+    'test_list_path': './filelist/list_test_H_cleaned.txt',
 }
 
 
