@@ -40,10 +40,13 @@ class Trainer:
         disrupt_file_list(self.config.config['train_list_path'])
         separate_file_list(self.config.config['train_list_path'], self.config.config['eval_list_path'], int(self.config.config['eval_num']))
 
-    def load_model(self):
+    def __load_model__(self):
         self.model = ECAPATDNN_model(self.config.config['model_save_path'], self.config.config['device'], int(self.config.config['C']), int(self.config.config['speaker']))
 
     def model_train(self):
+        if self.model is None:
+            self.__load_model__()
+
         train_dataset = Dataset(self.config.config['train_dataset_path'], self.config.config['train_list_path'], int(self.config.config['batch_size']), int(self.config.config['slice_length']), self.config.config['device'])
         eval_dataset = Dataset(self.config.config['train_dataset_path'], self.config.config['eval_list_path'], int(self.config.config['batch_size']), int(self.config.config['slice_length']), self.config.config['device'])
 
@@ -64,6 +67,9 @@ class Trainer:
             self.model.save()
 
     def model_test(self):
+        if self.model is None:
+            self.__load_model__()
+
         true_positive, true_negative, false_positive, false_negative = 0, 0, 0, 0
         test_dataset = Dataset_test(self.config.config['test_dataset_path'], self.config.config['test_list_path'], int(self.config.config['test_num']), int(self.config.config['slice_length']), self.config.config['device'])
 
@@ -81,6 +87,9 @@ class Trainer:
         logging.info(f'eer = {eer}')
 
     def model_infer(self, audio1, audio2):
+        if self.model is None:
+            self.__load_model__()
+
         audio1 = torch.tensor(audio1, device=self.config.config['device'])
         audio1 = audio1 / torch.max(audio1)
 
@@ -89,6 +98,9 @@ class Trainer:
         return self.model.infer(audio1, audio2)
 
     def model_draw(self):
+        if self.model is None:
+            self.__load_model__()
+
         batch_size = int(self.config.config['batch_size'])
         slice_length = int(self.config.config['slice_length'])
         draw_batch = torch.zeros([batch_size, slice_length], device=self.config.config['device'])
@@ -101,7 +113,6 @@ if __name__ == '__main__':  # example
 
     model = Trainer()
     model.model_pretrain()
-    model.load_model()
 
     model.model_train()
     model.model_test()

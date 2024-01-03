@@ -24,10 +24,10 @@ class MFCC(nn.Module):
         })
 
     def forward(self, x):
-        y = torch.nn.functional.pad(x, (1, 0), 'reflect')[:, :-1]
-
-        y = self.layer0(x - 0.97 * y)
-        return y - torch.mean(y, dim=1, keepdim=True)
+        with torch.no_grad():
+            y = torch.nn.functional.pad(x, (1, 0), 'reflect')[:, :-1]
+            y = self.layer0(x - 0.97 * y)
+            return y - torch.mean(y, dim=1, keepdim=True)
 
 
 class ECAPATDNN_model:
