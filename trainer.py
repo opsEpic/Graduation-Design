@@ -5,34 +5,10 @@ from config import Config
 from models.ecapa_tdnn.modeler import ECAPATDNN_model
 from dataset.dataset import creat_file_list, audio_norm, Dataset_train, Dataset_eval
 
-config_preset = {
-    'train_dataset_path': './raw/vox2/wav',
-    'train_list_path': './filelists/train.txt',
-
-    'eval_num': 128,
-    'eval_dataset_path': './raw/vox1/wav',
-    'eval_list_path': './filelists/veri_test_cleaned.txt',
-
-    'C': 512,
-
-    'speaker': 40,
-    'batch_size': 32,
-    'slice_length': 2 * 16000,
-    'model_train_epoch': 1,
-    'device': 'cuda',
-
-    'model_save': False,
-    'model_save_path': './exps',
-
-    'test_num': 1024,
-    'test_dataset_path': './raw/vox1/wav',
-    'test_list_path': './filelists/list_test_H_cleaned.txt',
-}
-
 
 class Trainer:
     def __init__(self):
-        self.config = Config('./config/train.json', config_preset)
+        self.config = Config('./config/train.json')
         self.model = None
 
     def model_pretrain(self):
