@@ -61,14 +61,13 @@ class ECAPATDNN_model:
     def save(self) -> None:
         torch.save(self.model, self.model_path + "/%04d.pt" % self.step)
 
-    def train(self, data) -> float:
+    def train(self, audio, label) -> float:
         self.model.train()
 
-        batch_input, batch_expect = data[0], data[1]
-        batch_input = self.mfcc(batch_input)
+        batch_input = self.mfcc(audio)
 
         batch_output = self.model(batch_input)
-        loss = self.criterion(batch_output, batch_expect)
+        loss = self.criterion(batch_output, label)
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -77,19 +76,7 @@ class ECAPATDNN_model:
         self.step += 1
         return loss.item()
 
-    def eval(self, data) -> float:
-        self.model.eval()
-
-        with torch.no_grad():
-            batch_input, batch_expect = data[0], data[1]
-            batch_input = self.mfcc(batch_input)
-
-            batch_output = self.model(batch_input)
-            loss = self.criterion(batch_output, batch_expect)
-
-            return loss.item()
-
-    def test(self, audio1, audio2, label) -> (int, int, int, int):
+    def eval(self, audio1, audio2, label) -> (int, int, int, int):
         true_positive, true_negative, false_positive, false_negative = 0, 0, 0, 0
 
         if label == self.infer(audio1, audio2):
@@ -115,10 +102,9 @@ class ECAPATDNN_model:
             score = torch.sum(vec1 * vec2).tolist()
             return 1 if score >= 0.5 else 0
 
-    def draw(self, data) -> None:
+    def draw(self, audio) -> None:
         self.model.train()
 
-        batch_input = data[0]
-        batch_input = self.mfcc(batch_input)
+        batch_input = self.mfcc(audio)
 
         make_dot(self.model(batch_input).mean(), params=dict(self.model.named_parameters())).view()

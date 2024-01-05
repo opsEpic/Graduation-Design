@@ -52,7 +52,7 @@ def model_infer(wav1, wav2):
     audio2 = librosa.resample(audio2, orig_sr=sr, target_sr=16000)
 
     label = model.model_infer(audio1, audio2)
-    return '推理完成' + ':' + '相同说话人' if label == 1 else '不同说话人'
+    return '推理完成' + ':' + ('相同说话人' if label == 1 else '不同说话人')
 
 
 def main():
