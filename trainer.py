@@ -6,11 +6,11 @@ from models.ecapa_tdnn.modeler import ECAPATDNN_model
 from dataset.dataset import creat_file_list, audio_norm, Dataset_train, Dataset_eval
 
 config_preset = {
-    'train_dataset_path': './row/vox2/wav',
+    'train_dataset_path': './raw/vox2/wav',
     'train_list_path': './filelists/train.txt',
 
-    'eval_dataset_path': './row/vox1/wav',
     'eval_num': 128,
+    'eval_dataset_path': './raw/vox1/wav',
     'eval_list_path': './filelists/veri_test_cleaned.txt',
 
     'C': 512,
@@ -24,8 +24,8 @@ config_preset = {
     'model_save': False,
     'model_save_path': './exps',
 
-    'test_dataset_path': './row/vox1/wav',
     'test_num': 1024,
+    'test_dataset_path': './raw/vox1/wav',
     'test_list_path': './filelists/list_test_H_cleaned.txt',
 }
 

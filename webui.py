@@ -76,18 +76,20 @@ def main():
                                 '`eval_num`验证集音频数。<br/>'
                                 '`train_list_path`训练集file_list输出路径。<br/>'
                                 '`eval_list_path`验证集file_list输出路径。<br/>')
-
-                    train_dataset_path = gr.Text(label='train_dataset_path', value=model.config.config['train_dataset_path'], interactive=True)
                     with gr.Row():
-                        eval_num = gr.Slider(label='eval_num', value=model.config.config['eval_num'], minimum=1, maximum=512, step=1, interactive=True)
-                    train_list_path = gr.Text(label='train_list_path', value=model.config.config['train_list_path'], interactive=True)
-                    eval_list_path = gr.Text(label='eval_list_path', value=model.config.config['eval_list_path'], interactive=True)
+                        train_dataset_path = gr.Text(label='train_dataset_path', value=model.config.config['train_dataset_path'], interactive=True)
+                        train_list_path = gr.Text(label='train_list_path', value=model.config.config['train_list_path'], interactive=True)
+                    eval_num = gr.Slider(label='eval_num', value=model.config.config['eval_num'], minimum=1, maximum=512, step=1, interactive=True)
+                    with gr.Row():
+                        eval_dataset_path = gr.Text(label='eval_dataset_path', value=model.config.config['eval_dataset_path'], interactive=True)
+                        eval_list_path = gr.Text(label='eval_list_path', value=model.config.config['eval_list_path'], interactive=True)
                     pretrain = gr.Button(value='开始预处理')
                     pretrain_output = gr.Text(label='output', value='')
 
                     train_dataset_path.change(config_update, inputs=[gr.Text(value='train_dataset_path', visible=False), train_dataset_path], outputs=[config])
-                    eval_num.change(config_update, inputs=[gr.Text(value='eval_num', visible=False), eval_num], outputs=[config])
                     train_list_path.change(config_update, inputs=[gr.Text(value='train_list_path', visible=False), train_list_path], outputs=[config])
+                    eval_num.change(config_update, inputs=[gr.Text(value='eval_num', visible=False), eval_num], outputs=[config])
+                    eval_dataset_path.change(config_update, inputs=[gr.Text(value='eval_dataset_path', visible=False), eval_dataset_path], outputs=[config])
                     eval_list_path.change(config_update, inputs=[gr.Text(value='eval_list_path', visible=False), eval_list_path], outputs=[config])
                     pretrain.click(model_pretrain, outputs=[pretrain_output])
 
@@ -129,10 +131,14 @@ def main():
                     gr.Markdown('<h2>测试</h2>')
 
                     test_num = gr.Slider(label='test_num', value=model.config.config['test_num'], minimum=1, maximum=4096, step=1, interactive=True)
+                    test_dataset_path = gr.Text(label='test_dataset_path', value=model.config.config['test_dataset_path'], interactive=True)
+                    test_list_path = gr.Text(label='test_list_path', value=model.config.config['test_list_path'], interactive=True)
                     test = gr.Button(value='开始测试')
                     text_output = gr.Text(label='output')
 
                     test_num.change(config_update, inputs=[gr.Text(value='test_num', visible=False), test_num], outputs=[config])
+                    test_dataset_path.change(config_update, inputs=[gr.Text(value='test_dataset_path', visible=False), test_dataset_path], outputs=[config])
+                    test_list_path.change(config_update, inputs=[gr.Text(value='test_list_path', visible=False), test_list_path], outputs=[config])
                     test.click(model_test, outputs=[text_output])
 
                 with gr.Tab('推理'):
