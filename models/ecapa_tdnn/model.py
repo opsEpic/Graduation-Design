@@ -112,7 +112,7 @@ class AttentiveStatPooling_block(nn.Module):
 
 
 class ECAPATDNN(nn.Module):
-    def __init__(self, C):
+    def __init__(self, C=512):
         super(ECAPATDNN, self).__init__()
 
         self.layer0 = TDNN(80, C, 5, 1)
@@ -126,9 +126,9 @@ class ECAPATDNN(nn.Module):
             nn.ReLU(),
 
             AttentiveStatPooling_block(3 * C),
-            nn.BatchNorm1d(3072),
+            nn.BatchNorm1d(2 * 3 * C),
 
-            nn.Linear(3072, 192),
+            nn.Linear(2 * 3 * C, 192),
         )
 
     def forward(self, x):

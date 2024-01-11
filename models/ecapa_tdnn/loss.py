@@ -5,7 +5,7 @@ import torch.nn as nn
 
 
 class AAMsoftmax(nn.Module):
-    def __init__(self, S, margin, scale):
+    def __init__(self, S, margin=0.2, scale=30):
         super(AAMsoftmax, self).__init__()
         self.m = margin
         self.s = scale

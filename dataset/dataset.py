@@ -56,9 +56,9 @@ class Dataset_train(Dataset_interface):
         return torch.stack(batch_input), torch.tensor(batch_expect, device=self.device)
 
 
-class Dataset_eval(Dataset_interface):
+class Dataset_test(Dataset_interface):
     def __init__(self, dataset_path, path, pair_num, batch_size, slice_length, device):
-        super(Dataset_eval, self).__init__(dataset_path, path, pair_num, batch_size, slice_length, device)
+        super(Dataset_test, self).__init__(dataset_path, path, pair_num, batch_size, slice_length, device)
 
     def __get_batch__(self):
         if self.file_list_pointer >= len(self.file_list):
