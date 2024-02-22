@@ -76,4 +76,3 @@ class Modeler_interface:
                 eers[i][j] = (fpr + 1. - tpr) / 2
 
         return eers
-

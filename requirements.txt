@@ -1,4 +1,3 @@
-gradio
 librosa
 numpy
 PySoundFile
@@ -7,3 +6,4 @@ torch
 torchaudio
 torchviz
 tqdm
+ffmpeg-python
