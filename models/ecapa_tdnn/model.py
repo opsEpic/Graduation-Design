@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 
 
-class TDNN(nn.Module):
+class Conv1dReluBn(nn.Module):
     def __init__(self, in_channels, out_channels, K, D):
-        super(TDNN, self).__init__()
+        super(Conv1dReluBn, self).__init__()
 
         self.layer0 = nn.Sequential(
             nn.Conv1d(in_channels, out_channels, kernel_size=K, dilation=D, padding=((K - 1) * D) // 2),
@@ -16,18 +16,19 @@ class TDNN(nn.Module):
         return self.layer0(x)
 
 
-class Res2_block(nn.Module):
+class Res2Conv1dReluBn(nn.Module):
     def __init__(self, in_channels, out_channels, K, D, scale=8):
-        super(Res2_block, self).__init__()
+        super(Res2Conv1dReluBn, self).__init__()
         self.scale = scale
 
         self.layer0 = nn.ModuleList([
-            TDNN(in_channels // self.scale, out_channels // self.scale, K, D)
+            Conv1dReluBn(in_channels // self.scale, out_channels // self.scale, K, D)
             for _ in range(self.scale - 1)
         ])
-
-        self.k = K
-        self.d = D
+        self.bn = nn.Sequential(
+            nn.ReLU(),
+            nn.BatchNorm1d(out_channels),
+        )
 
     def forward(self, x):
         y = []
@@ -40,12 +41,13 @@ class Res2_block(nn.Module):
                 temp_y = self.layer0[i - 1](temp_x + y[i - 1])
             y.append(temp_y)
 
-        return torch.cat(y, dim=1)
+        x = torch.cat(y, dim=1)
+        return self.bn(x)
 
 
-class SE_block(nn.Module):
+class SEBlock(nn.Module):
     def __init__(self, in_channels, out_channels, bottleneck=128):
-        super(SE_block, self).__init__()
+        super(SEBlock, self).__init__()
 
         self.layer0 = nn.Sequential(
             nn.AdaptiveAvgPool1d(1),
@@ -60,43 +62,37 @@ class SE_block(nn.Module):
         return x * self.layer0(x)
 
 
-class SERes2_block(nn.Module):
+class SERes2Block(nn.Module):
     def __init__(self, C, K, D):
-        super(SERes2_block, self).__init__()
+        super(SERes2Block, self).__init__()
 
         self.layer0 = nn.Sequential(
-            TDNN(C, C, 1, 1),
-
-            Res2_block(C, C, K, D),
-            nn.ReLU(),
-            nn.BatchNorm1d(C),
-
-            TDNN(C, C, 1, 1),
-
-            SE_block(C, C),
+            Conv1dReluBn(C, C, 1, 1),
+            Res2Conv1dReluBn(C, C, K, D),
+            Conv1dReluBn(C, C, 1, 1),
+            SEBlock(C, C),
         )
 
     def forward(self, x):
         return x + self.layer0(x)
 
 
-class AttentiveStatPooling_block(nn.Module):
+class ASPBlock(nn.Module):
     def __init__(self, in_channels, attention_channels=128):
-        super(AttentiveStatPooling_block, self).__init__()
+        super(ASPBlock, self).__init__()
 
         self.layer0 = nn.Sequential(
-            TDNN(3 * in_channels, attention_channels, 1, 1),
+            Conv1dReluBn(3 * in_channels, attention_channels, 1, 1),
             nn.Tanh(),
-            TDNN(attention_channels, in_channels, 1, 1),
+            Conv1dReluBn(attention_channels, in_channels, 1, 1),
             nn.Softmax(dim=2),
         )
 
     def forward(self, x):
-        t = x.size()[-1]
         global_x = torch.cat((
             x,
-            torch.mean(x, dim=2, keepdim=True).repeat(1, 1, t),
-            torch.sqrt(torch.var(x, dim=2, keepdim=True).clamp(min=1e-4)).repeat(1, 1, t),
+            torch.mean(x, dim=2, keepdim=True).repeat(1, 1, x.size()[-1]),
+            torch.sqrt(torch.var(x, dim=2, keepdim=True).clamp(min=1e-4)).repeat(1, 1, x.size()[-1]),
         ), dim=1)
 
         w = self.layer0(global_x)
@@ -115,20 +111,16 @@ class ECAPATDNN(nn.Module):
     def __init__(self, C=512):
         super(ECAPATDNN, self).__init__()
 
-        self.layer0 = TDNN(80, C, 5, 1)
+        self.layer0 = Conv1dReluBn(80, C, 5, 1)
 
-        self.layer1 = SERes2_block(C, 3, 2)
-        self.layer2 = SERes2_block(C, 3, 3)
-        self.layer3 = SERes2_block(C, 3, 4)
+        self.layer1 = SERes2Block(C, 3, 2)
+        self.layer2 = SERes2Block(C, 3, 3)
+        self.layer3 = SERes2Block(C, 3, 4)
 
         self.layer4 = nn.Sequential(
-            nn.Conv1d(3 * C, 3 * C, kernel_size=1),
-            nn.ReLU(),
-
-            AttentiveStatPooling_block(3 * C),
-            nn.BatchNorm1d(2 * 3 * C),
-
-            nn.Linear(2 * 3 * C, 192),
+            Conv1dReluBn(3 * C, 1536, 1, 1),
+            ASPBlock(1536),
+            nn.Linear(2 * 1536, 192),
         )
 
     def forward(self, x):

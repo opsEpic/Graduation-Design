@@ -1,7 +1,8 @@
 from config import Config
-from transfrom.transfrom import trans
+# from transfrom.transfrom import trans
 from dataset.dataset import Dataset_train, Dataset_test, creat_file_list
-import models.ecapa_tdnn.modeler as modeler
+import models.ecapa_tdnn.modeler as modeler1
+import models.pcf_ecapa_tdnn.modeler as modeler2
 
 config = Config('config/config.json')
 
@@ -25,7 +26,6 @@ class Trainer:
 
 
 if __name__ == '__main__':
-    # trans("D:/gd/Graduation-Design/raw/vox2/aac", "D:/gd/Graduation-Design/raw/vox2/wav")
-    trainer1 = Trainer(modeler.Modeler)
-    print(trainer1.get_err())
+    print(Trainer(modeler1.Modeler).get_err())
+    # print(Trainer(modeler2.Modeler).get_err())
 
