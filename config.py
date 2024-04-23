@@ -6,17 +6,15 @@ config_preset = {
     'train_dataset_path': './raw/vox2/wav',
     'train_list_path': './filelists/train.txt',
 
-    'test_num': 1024,
-    'test_dataset_path': './raw/vox1/wav',
-    'test_list_path': './filelists/list_test_H_cleaned.txt',
+    'eval_dataset_path': './raw/vox1/wav',
+    'eval_list_path': './filelists/list_test_H_cleaned.txt',
 
-    'speaker': 40,
+    'speaker': 5994,
     'batch_size': 32,
     'slice_length': 2 * 16000,
     'device': 'cuda',
 
-    'epochs': 8,
-    'repeats': 8,
+    'save_path': './exps',
 }
 
 

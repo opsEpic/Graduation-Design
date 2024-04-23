@@ -93,18 +93,14 @@ class ASPBlock(nn.Module):
             x,
             torch.mean(x, dim=2, keepdim=True).repeat(1, 1, x.size()[-1]),
             torch.sqrt(torch.var(x, dim=2, keepdim=True).clamp(min=1e-4)).repeat(1, 1, x.size()[-1]),
-        ), dim=1)
+        ), 1)
 
         w = self.layer0(global_x)
 
         mu = torch.sum(x * w, dim=2)
         sg = torch.sqrt((torch.sum((x ** 2) * w, dim=2) - mu ** 2).clamp(min=1e-4))
-        x = torch.cat((
-            mu,
-            sg,
-        ), dim=1)
 
-        return x
+        return torch.cat((mu, sg), 1)
 
 
 class ECAPATDNN(nn.Module):
@@ -121,6 +117,7 @@ class ECAPATDNN(nn.Module):
             Conv1dReluBn(3 * C, 1536, 1, 1),
             ASPBlock(1536),
             nn.Linear(2 * 1536, 192),
+            nn.BatchNorm1d(192),
         )
 
     def forward(self, x):
@@ -130,5 +127,4 @@ class ECAPATDNN(nn.Module):
         x2 = self.layer2(x1)
         x3 = self.layer3(x2)
 
-        x = self.layer4(torch.cat((x1, x2, x3), dim=1))
-        return nn.functional.normalize(x)
+        return self.layer4(torch.cat((x1, x2, x3), dim=1))
