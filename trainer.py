@@ -4,7 +4,7 @@ import torch
 
 from config import Config
 from dataset import train_loader
-from models.pcf_ecapa_tdnn.model import PCFECAPATDNN
+from models.ecapa_tdnn.model import ECAPATDNN
 from models.modeler import Modeler
 
 config = Config('config/config.json')
@@ -13,8 +13,8 @@ trainloader = train_loader(config.config['train_list_path'], config.config['trai
 trainloader = torch.utils.data.DataLoader(trainloader, batch_size=config.config['batch_size'], shuffle=True, num_workers=8, drop_last=True)
 
 if __name__ == '__main__':
-    t1 = Modeler(PCFECAPATDNN(), config.config['speaker'], config.config['device'], config.config['save_path'])
-    for i in range(4):
+    t1 = Modeler(ECAPATDNN(), config.config['speaker'], config.config['device'], config.config['save_path'])
+    for i in range(8):
         t1.model_train(trainloader)
         t1.model_save(config.config['save_path'])
         print(t1.model_eval(config.config['eval_list_path'], config.config['eval_dataset_path']))
