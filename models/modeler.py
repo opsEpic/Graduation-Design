@@ -24,17 +24,9 @@ class Modeler(nn.Module):
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=1, gamma=0.97)
 
         if path is not None:
-            models = []
-
-            path0 = path
-            for file0 in os.listdir(path0):
-                if file0.endswith('.pt'):
-                    models.append(file0)
-
-            if len(models) > 0:
-                for name, param in torch.load(os.path.join(path0, models[-1])).items():
-                    self.epoch = int(models[-1][:-3])
-                    self.state_dict()[name].copy_(param)
+            for name, param in torch.load(path).items():
+                self.epoch = int(os.path.basename(path)[:-3])
+                self.state_dict()[name].copy_(param)
 
         self.to(device)
 
@@ -56,7 +48,7 @@ class Modeler(nn.Module):
         self.scheduler.step()
         self.epoch += 1
 
-    def model_eval(self, eval_list, eval_path):
+    def model_eval(self, eval_list, eval_path, slice_length):
         self.eval()
 
         files = []
@@ -72,7 +64,7 @@ class Modeler(nn.Module):
             audio, _ = soundfile.read(os.path.join(eval_path, file))
             data_1 = torch.FloatTensor(numpy.stack([audio], axis=0)).cuda()
 
-            max_audio = 300 * 160 + 240
+            max_audio = slice_length + 240
             if audio.shape[0] <= max_audio:
                 shortage = max_audio - audio.shape[0]
                 audio = numpy.pad(audio, (0, shortage), 'wrap')
@@ -91,8 +83,8 @@ class Modeler(nn.Module):
                 embedding_2 = self.model(self.preprocess(data_2, False))
                 embedding_2 = F.normalize(embedding_2, p=2, dim=1)
             embeddings[file] = [embedding_1, embedding_2]
-        scores, labels = [], []
 
+        scores, labels = [], []
         for line in lines:
             embedding_11, embedding_12 = embeddings[line.split()[1]]
             embedding_21, embedding_22 = embeddings[line.split()[2]]
@@ -107,6 +99,41 @@ class Modeler(nn.Module):
             labels.append(int(line.split()[0]))
 
         return tuneThresholdfromScore(scores, labels, [1, 0.1])[1]
+
+    def model_infer(self, audios, slice_length):
+        self.eval()
+
+        embeddings = []
+        for audio in audios:
+            data_1 = torch.FloatTensor(numpy.stack([audio], axis=0)).cuda()
+
+            max_audio = slice_length + 240
+            if audio.shape[0] <= max_audio:
+                shortage = max_audio - audio.shape[0]
+                audio = numpy.pad(audio, (0, shortage), 'wrap')
+
+            feats = []
+            startframe = numpy.linspace(0, audio.shape[0] - max_audio, num=5)
+            for asf in startframe:
+                feats.append(audio[int(asf):int(asf) + max_audio])
+
+            feats = numpy.stack(feats, axis=0).astype(numpy.float32)
+            data_2 = torch.FloatTensor(feats).cuda()
+
+            with torch.no_grad():
+                embedding_1 = self.model(self.preprocess(data_1, False))
+                embedding_1 = F.normalize(embedding_1, p=2, dim=1)
+                embedding_2 = self.model(self.preprocess(data_2, False))
+                embedding_2 = F.normalize(embedding_2, p=2, dim=1)
+            embeddings.append([embedding_1, embedding_2])
+
+        score_1 = torch.mean(torch.matmul(embeddings[0][0], embeddings[1][0].T))
+        score_2 = torch.mean(torch.matmul(embeddings[0][1], embeddings[1][1].T))
+
+        score = (score_1 + score_2) / 2
+        score = score.detach().cpu().numpy()
+
+        return score
 
     def model_save(self, path):
         torch.save(self.state_dict(), path + "/%06d.pt" % self.epoch)

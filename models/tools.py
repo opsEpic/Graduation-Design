@@ -15,7 +15,7 @@ def tuneThresholdfromScore(scores, labels, target_fa, target_fr=None):
             idx = numpy.nanargmin(numpy.absolute((tfr - fnr)))
             tunedThreshold.append([thresholds[idx], fpr[idx], fnr[idx]])
     for tfa in target_fa:
-        idx = numpy.nanargmin(numpy.absolute((tfa - fpr)))  # numpy.where(fpr<=tfa)[0][-1]
+        idx = numpy.nanargmin(numpy.absolute((tfa - fpr)))
         tunedThreshold.append([thresholds[idx], fpr[idx], fnr[idx]])
     idxE = numpy.nanargmin(numpy.absolute((fnr - fpr)))
     eer = max(fpr[idxE], fnr[idxE]) * 100.
