@@ -81,7 +81,7 @@ if __name__ == '__main__':
                         for _ in range(in_epoch):
                             model.model_train(trainloader)
                             model.model_save(config.config['save_path'])
-                            time.sleep(100)
+                            time.sleep(1)
 
 
                     model_train.click(func_model_train, inputs=[model_type1, epoch])
@@ -111,7 +111,7 @@ if __name__ == '__main__':
                         for in_model in in_models:
                             model = Modeler(types[in_type](), config.config['speaker'], config.config['device'], in_model)
                             print(model.model_eval(config.config['eval_list_path'], config.config['eval_dataset_path'], config.config['slice_length']))
-                            time.sleep(100)
+                            time.sleep(1)
 
 
                     model_eval.click(func_model_eval, inputs=[model_type2, target1])

@@ -34,4 +34,4 @@ if __name__ == '__main__':
         t1.model_train(trainloader)
         t1.model_save(config.config['save_path'])
         print(t1.model_eval(config.config['eval_list_path'], config.config['eval_dataset_path'], config.config['slice_length']))
-        time.sleep(100)
+        time.sleep(1)
